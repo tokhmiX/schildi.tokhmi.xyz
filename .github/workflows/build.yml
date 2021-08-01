@@ -16,19 +16,17 @@ jobs:
             - name: Set up Node
               uses: actions/setup-node@v2
 
-            - run: cp config.json element-web/
-            - run: cd element-web/
-            - run: yarn install
-            - run: yarn build
-            - run: cp config.json webapp/
+            - run: yarn --cwd element-web install
+            - run: yarn --cwd element-web build
+            - run: cp config.json element-web/webapp/
             - run: |
-                echo $(grep version package.json | sed 's|.*: \"\(.*\)\",|\1|' > webapp/version
+                echo $(grep version package.json | sed 's|.*: \"\(.*\)\",|\1|' > element-web/webapp/version
 
             - name: Deploy
               uses: crazy-max/ghaction-github-pages@v2
               with:
                   target_branch: gh-pages
-                  build_dir: webapp
+                  build_dir: element-web/webapp
                   fqdn: schildi.boba.best
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
