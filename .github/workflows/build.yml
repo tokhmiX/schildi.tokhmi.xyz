@@ -16,7 +16,7 @@ jobs:
             - name: Set up Node
               uses: actions/setup-node@v2
 
-            - run: yarn --cwd element-web install
+            - run: make setup reskindex
             - run: yarn --cwd element-web build
             - run: cp config.json element-web/webapp/
             - run: |
