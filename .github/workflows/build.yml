@@ -20,7 +20,7 @@ jobs:
             - run: yarn --cwd element-web build
             - run: cp config.json element-web/webapp/
             - run: |
-                echo $(grep version package.json | sed 's|.*: \"\(.*\)\",|\1|' > element-web/webapp/version
+                echo $(grep version package.json | sed 's|.*: \"\(.*\)\",|\1|') > element-web/webapp/version
 
             - name: Deploy
               uses: crazy-max/ghaction-github-pages@v2
