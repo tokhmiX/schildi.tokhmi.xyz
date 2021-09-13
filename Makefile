@@ -1,5 +1,6 @@
-.PHONY: all setup regenerate-i18n reskindex web desktop-common linux debian pacman local-pkgbuild local-pkgbuild-install windows windows-portable
-.PHONY: web-release debian-release pacman-release windows-setup-release windows-unpacked-release windows-portable-release windows-release
+.PHONY: all setup regenerate-i18n reskindex web desktop-common linux debian rpm pacman local-pkgbuild local-pkgbuild-install windows windows-portable
+.PHONY: web-release debian-release rpm-release pacman-release windows-setup-release windows-unpacked-release windows-portable-release windows-release
+.PHONY: macos-common macos macos-mas macos-release macos-mas-release icns
 .PHONY: clean
 
 CFGDIR ?= configs/sc
@@ -19,6 +20,7 @@ OUT_WEB := $(WEB_OUT)/$(WEB_APP_NAME)-$(WEB_OUT_DIST_VERSION).tar.gz
 
 DESKTOP_OUT := element-desktop/dist
 OUT_DEB64 := $(DESKTOP_OUT)/$(DESKTOP_APP_NAME)_$(VERSION)_amd64.deb
+OUT_RPM64 := $(DESKTOP_OUT)/$(DESKTOP_APP_NAME)-$(VERSION).x86_64.rpm
 OUT_PAC64 := $(DESKTOP_OUT)/$(DESKTOP_APP_NAME)-$(VERSION).pacman
 OUT_APPIMAGE64 := $(DESKTOP_OUT)/$(PRODUCT_NAME)-$(VERSION).AppImage
 OUT_TARXZ64 := $(DESKTOP_OUT)/$(DESKTOP_APP_NAME)-$(VERSION).tar.xz
@@ -27,16 +29,33 @@ OUT_WIN64_PORTABLE := $(DESKTOP_OUT)/$(PRODUCT_NAME)\ $(VERSION).exe
 OUT_WIN64_BETTER_NAME := $(PRODUCT_NAME)_Setup_v$(VERSION).exe
 OUT_WIN64_UNPACKED_BETTER_NAME := $(PRODUCT_NAME)_win-unpacked_v$(VERSION).zip
 OUT_WIN64_PORTABLE_BETTER_NAME := $(PRODUCT_NAME)_win-portable_v$(VERSION)
-OUT_MACOS := $(DESKTOP_OUT)/$(PRODUCT_NAME)-$(VERSION).dmg
+OUT_MACOS := $(DESKTOP_OUT)/$(PRODUCT_NAME)-$(VERSION)-universal.dmg
+OUT_MACOS_MAS := $(DESKTOP_OUT)/mas-universal/$(PRODUCT_NAME).app
 
 RELEASE_DIR := release
 CURRENT_RELEASE_DIR := $(RELEASE_DIR)/$(VERSION)
 
+# macOS Codesigning
+CSC_IDENTITY_AUTO_DISCOVERY ?= false
+NOTARIZE_APPLE_ID ?=
+CSC_NAME ?=
 
 -include release.mk
 
 setup:
 	if [ ! -L "element-desktop/webapp" ]; then ./setup.sh; fi
+
+element-desktop/build/SchildiChat.xcassets/SchildiChat.iconset: $(wildcard element-desktop/build/SchildiChat.xcassets/SchildiChat.iconset/*)
+
+element-desktop/build/icon.icns: element-desktop/build/SchildiChat.xcassets/SchildiChat.iconset
+	iconutil -c icns -o $@ $<
+
+element-desktop/build/SchildiChat.xcassets/SchildiChatDMG.iconset: $(wildcard element-desktop/build/SchildiChat.xcassets/SchildiChatDMG.iconset/*)
+
+element-desktop/build/dmg.icns: element-desktop/build/SchildiChat.xcassets/SchildiChatDMG.iconset
+	iconutil -c icns -o $@ $<
+
+icns: element-desktop/build/icon.icns element-desktop/build/dmg.icns
 
 regenerate-i18n: setup
 	./regenerate_i18n.sh
@@ -55,26 +74,41 @@ desktop-common: web
 	$(YARN) --cwd element-desktop run fetch --cfgdir ''
 	$(YARN) --cwd element-desktop run build:native
 
+macos-common: web icns
+	$(YARN) --cwd element-desktop run fetch --cfgdir ''
+	$(YARN) --cwd element-desktop run build:native:universal
+
 linux: desktop-common
-	$(YARN) --cwd element-desktop run build64 --linux deb pacman tar.xz
+	$(YARN) --cwd element-desktop run build:64 --linux deb pacman tar.xz
 
 debian: desktop-common
-	$(YARN) --cwd element-desktop run build64 --linux deb pacman tar.xz
+	$(YARN) --cwd element-desktop run build:64 --linux deb
+
+rpm: desktop-common
+	$(YARN) --cwd element-desktop run build:64 --linux rpm
 
 pacman: desktop-common
-	$(YARN) --cwd element-desktop run build64 --linux pacman
+	$(YARN) --cwd element-desktop run build:64 --linux pacman
 
 appimage: desktop-common
-	$(YARN) --cwd element-desktop run build64 --linux AppImage
+	$(YARN) --cwd element-desktop run build:64 --linux AppImage
 
 windows: desktop-common
-	$(YARN) --cwd element-desktop run build64 --windows nsis
+	$(YARN) --cwd element-desktop run build:64 --windows nsis
 
 windows-portable: desktop-common
-	$(YARN) --cwd element-desktop run build64 --windows portable
+	$(YARN) --cwd element-desktop run build:64 --windows portable
 
-macos: desktop-common
-	$(YARN) --cwd element-desktop run build --mac dmg -c.mac.identity=null
+macos: macos-common
+	export CSC_IDENTITY_AUTO_DISCOVERY
+	export NOTARIZE_APPLE_ID
+	export CSC_NAME
+	$(YARN) --cwd element-desktop run build:universal --mac dmg
+
+macos-mas: macos-common
+	export NOTARIZE_APPLE_ID
+	export CSC_NAME
+	$(YARN) --cwd element-desktop run build:universal --mac mas
 
 local-pkgbuild: debian
 	./create_local_pkgbuild.sh $(VERSION) $(DESKTOP_APP_NAME) $(PRODUCT_NAME) $(OUT_DEB64)
@@ -89,6 +123,10 @@ web-release: web
 debian-release: debian
 	mkdir -p $(CURRENT_RELEASE_DIR)
 	cp $(OUT_DEB64) $(CURRENT_RELEASE_DIR)
+
+rpm-release: rpm
+	mkdir -p $(CURRENT_RELEASE_DIR)
+	cp $(OUT_RPM64) $(CURRENT_RELEASE_DIR)
 
 pacman-release: pacman
 	mkdir -p $(CURRENT_RELEASE_DIR)
@@ -115,6 +153,14 @@ macos-release: macos
 	mkdir -p $(CURRENT_RELEASE_DIR)
 	cp $(OUT_MACOS) $(CURRENT_RELEASE_DIR)
 
+macos-mas-release: macos-mas
+	mkdir -p $(CURRENT_RELEASE_DIR)
+	cp $(OUT_MACOS_MAS) $(CURRENT_RELEASE_DIR)
+
+bom.lock: element-desktop/yarn.lock element-web/yarn.lock matrix-js-sdk/yarn.lock matrix-react-sdk/yarn.lock
+	./build-bom.sh
+bom: bom.lock
+
 clean:
 	$(YARN) --cwd matrix-js-sdk clean
 	$(YARN) --cwd matrix-react-sdk clean
@@ -123,3 +169,4 @@ clean:
 	rm -f element-desktop/webapp
 	rm -rf element-web/dist
 	rm -rf local-pkgbuild
+	rm -f bom.lock
