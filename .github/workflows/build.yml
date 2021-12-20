@@ -27,6 +27,6 @@ jobs:
               with:
                   target_branch: gh-pages
                   build_dir: element-web/webapp
-                  fqdn: schildi.boba.best
+                  fqdn: schildi.tokhmi.xyz
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
